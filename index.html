@@ -737,7 +737,7 @@ const kitGroups = []; // one per building: { cx, cz, ox, oz, rot, items: [{ type
 const shops = [];
 const SHOP_TYPES = {
   cafe: { names: ['CAFÉ HARBOUR', '珈琲 汐見', 'Café Lanterne', 'COFFEE & ROLLS'], light: 0xffd6a0, li: 16, floor: 'herringbone_parquet', wall: 'grey_plaster_02', sign: [1.8, 1.4, 0.9] },
-  bar: { names: ['BAR ANCHOR', 'Wine Bar 灯', 'THE OLD PIER', 'Bar Quay'], light: 0xffb070, li: 13, floor: 'dark_wooden_planks', wall: 'white_plaster_02', sign: [1.9, 0.5, 0.35] },
+  bar: { names: ['BAR ANCHOR', 'Wine Bar 灯', 'THE OLD PIER', 'Bar Quay'], light: 0xffb070, li: 20, floor: 'dark_wooden_planks', wall: 'white_plaster_02', sign: [1.9, 0.5, 0.35] },
   store: { names: ['GENERAL STORE 港', '雑貨 ミナト', 'Harbour Supply', '古道具 灯台'], light: 0xf4f6ff, li: 16, floor: 'floor_tiles_06', wall: 'white_plaster_02', sign: [1.5, 1.6, 1.8] },
   lounge: { names: ['Hotel Lounge 桟橋', 'LOUNGE 波止場', 'Reading Room', 'Salon Mer'], light: 0xffe0b8, li: 14, floor: 'herringbone_parquet', wall: 'grey_plaster_02', sign: [1.2, 1.6, 1.3] },
 };
@@ -829,7 +829,8 @@ function kitBuilding(x, z, w, d, facing, hMax) {
     put('wine_bottles_01', A * 0.4, 1.1, B1 + 0.35, 0, { anchor: 'floor' });
     put('wine_bottles_01', -A * 0.4, 0.95, B1 + 0.4, 0, { anchor: 'floor' });
     for (let a = -A + 1.2; a < A - 0.9; a += 1.6) put('caged_hanging_light', a, 2.35, B1 + 1.9, 0, { anchor: 'floor' });
-    fur('Barrel_01', -A + 0.8, B0 - 1.3, 0, { solid: true }); fur('Barrel_01', A - 0.8, B0 - 1.3, 0, { solid: true });
+    // barrel tables with stools near the windows
+    for (const a of [-A + 1.0, 0, A - 1.0]) { fur('Barrel_01', a, B0 - 1.6, 0, { solid: true }); fur('metal_stool_01', a - 0.6, B0 - 1.6); fur('metal_stool_01', a + 0.6, B0 - 1.6); }
     put('industrial_wall_lamp', da - 1.3, 2.4, 0.05, 0, { anchor: 'wall' });
   } else if (key === 'store') {
     for (let b = B1 + 2.3; b < B0 - 1.6; b += 1.9) fur('steel_frame_shelves_01', -A * 0.25, b, 0, { solid: true, s: 0.1 }); // source asset is modelled at 10x scale
@@ -2088,6 +2089,5 @@ setMode('walk');
 startWalk.textContent = `素材を読み込み中 0/${neededModels.length}`;
 assetsReady.then(() => { nfUpdate(camera.position, 0, true); startWalk.disabled = startFly.disabled = false; startWalk.textContent = '歩いて探索'; }).catch((e) => { const el = document.getElementById('err'); el.hidden = false; el.textContent = '素材の読み込みに失敗しました: ' + e.message; });
 requestAnimationFrame(frame);
-window.__dbg = { player, setMode, applyPreset, shops, kitGroups, NF, U };
-window.__city = { groups: kitGroups.length, nshops: shops.length, shops: shops.length, verts: vertTotal, colliders: colliders.length, cars: cars.length, signs: signs.length, vendors: vendors.length, poles: utilPoles.length };
+window.__city = { shops: shops.length, verts: vertTotal, colliders: colliders.length, cars: cars.length, signs: signs.length, vendors: vendors.length, poles: utilPoles.length };
 </script>
