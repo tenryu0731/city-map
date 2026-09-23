@@ -1529,6 +1529,12 @@ function dequantize(geo) {
   }
   return geo;
 }
+// window glass: keep the dirty-glass texture but let the rooms behind show through
+const glassMats = new Map();
+function glassFor(mat) {
+  if (!glassMats.has(mat.uuid)) { const m = mat.clone(); m.transparent = true; m.opacity = 0.42; m.depthWrite = false; m.roughness = 0.08; glassMats.set(mat.uuid, m); }
+  return glassMats.get(mat.uuid);
+}
 function collectParts(root, tintMode) {
   root.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
@@ -1539,7 +1545,7 @@ function collectParts(root, tintMode) {
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     for (const mat of mats) {
       const tint = tintMode && /plaster|brick/i.test(mat.name) ? tintMode : null;
-      parts.push({ geo, mat: tint ? tintMaterial(mat, tint) : mat, tint: !!tint });
+      parts.push({ geo, mat: tint ? tintMaterial(mat, tint) : /glass/i.test(mat.name) ? glassFor(mat) : mat, tint: !!tint });
     }
   });
   return parts;
