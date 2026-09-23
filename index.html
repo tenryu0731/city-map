@@ -2061,7 +2061,7 @@ function frame() {
   if (nfReady) nfUpdate(focus, dt);
   warnMat.color.setRGB(1, 0.08, 0.05).multiplyScalar(Math.sin(t * 2.6) > 0.55 ? 7 : 0.25);
   rainMat.uniforms.uCam.value.copy(camera.position);
-  rainMat.uniforms.uAmt.value += ((rainOn ? 1 : 0) - rainMat.uniforms.uAmt.value) * Math.min(1, dt * 2);
+  rainMat.uniforms.uAmt.value += ((rainOn && !insideShop ? 1 : 0) - rainMat.uniforms.uAmt.value) * Math.min(1, dt * 2);
   U.rain.value = rainMat.uniforms.uAmt.value;
   const expT = insideShop ? Math.min(baseExposure, 0.85) : baseExposure;
   renderer.toneMappingExposure += (expT - renderer.toneMappingExposure) * Math.min(1, dt * 2.5);
