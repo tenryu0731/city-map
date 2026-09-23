@@ -850,6 +850,12 @@ function kitBuilding(x, z, w, d, facing, hMax) {
     fur('potted_plant_02', A - 0.5, B0 - 0.6); fur('side_table_01', -1.6, B1 + 3.2);
     put('tea_set_01', 0, 0.72, B1 + 2.0, 0, { anchor: 'floor' });
     put('ceiling_fan', 0, 3.2, cb, 0, { anchor: 'ceiling' });
+    if (Dp > 8) { // second seating group towards the windows in deep rooms
+      const b2 = B0 - 2.6;
+      fur('modern_coffee_table_01', A * 0.35, b2, Math.PI / 2, { solid: true });
+      fur('modern_arm_chair_01', A * 0.35 - 1.2, b2, Math.PI / 2); fur('modern_arm_chair_01', A * 0.35 + 1.2, b2, -Math.PI / 2);
+      fur('potted_plant_02', -A + 0.5, B0 - 0.6); fur('side_table_01', -A * 0.35, b2);
+    }
     put('wall_clock', 1.5, 2.3, B1 + 0.02, 0, { anchor: 'wall' });
   }
   put('planter_box_01', da - 1.8, 0.25, 0.55, 0, { anchor: 'floor' });
