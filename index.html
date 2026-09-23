@@ -68,6 +68,8 @@
   .tbtns button:active { background: var(--sodium); color: var(--sodium-ink); }
   body.mode-walk #flyBtns, body.mode-fly #walkBtns { display: none; }
 
+  #toast { position: fixed; left: 50%; top: calc(76px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 8px 14px; font-size: 14px; color: var(--ink); white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+  #toast b { color: var(--sodium); font-weight: 600; }
   body.hud-off #hud { display: none; }
   @media (max-width: 640px) {
     #stats { display: none; }
@@ -102,6 +104,7 @@
       <button type="button" data-mode="fly">飛ぶ</button>
     </div>
     <div class="seg panel" role="group" aria-label="時間帯">
+      <button type="button" data-preset="day">昼</button>
       <button type="button" data-preset="blue">夕景</button>
       <button type="button" data-preset="night">深夜</button>
       <button type="button" data-preset="golden">夕日</button>
@@ -112,10 +115,11 @@
   <div id="keys" class="panel">
     <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動　<kbd>Mouse</kbd> 視点　<kbd>Shift</kbd> 走る/加速<br>
     <kbd>Space</kbd> ジャンプ/上昇　<kbd>C</kbd> 下降　<kbd>F</kbd> 歩く⇄飛ぶ<br>
-    <kbd>T</kbd> 時間帯　<kbd>R</kbd> 雨　<kbd>H</kbd> UI表示切替
+    店は入口から中に入れます　<kbd>T</kbd> 時間帯　<kbd>R</kbd> 雨　<kbd>H</kbd> UI表示切替
   </div>
   <div id="resume" class="panel" hidden>クリックで操作を再開（ドラッグでも視点移動できます）</div>
   <div id="reticle"></div>
+  <div id="toast" class="panel" hidden></div>
   <div id="touch">
     <div id="pad"><i id="padKnob"></i></div>
     <div id="hint">左側ドラッグで移動・右側ドラッグで視点</div>
@@ -490,18 +494,19 @@ class GB {
       u += len;
     }
     if (caps) this.cap(tp, y1, Pm, C);
+    if (o.bottom) this.cap(poly, y0, Pm, C, true);
   }
-  cap(poly, y, Pm, C) {
+  cap(poly, y, Pm, C, down = false) {
     const tris = THREE.ShapeUtils.triangulateShape(poly.map((p) => new THREE.Vector2(p[0], p[1])), []);
     const base = this.vc;
-    for (const p of poly) this.v(p[0], y, p[1], 0, 1, 0, p[0], p[1], Pm, C);
+    for (const p of poly) this.v(p[0], y, p[1], 0, down ? -1 : 1, 0, p[0], p[1], Pm, C);
     for (const [a, b, c] of tris) {
       const A = poly[a], B = poly[b], Cc = poly[c];
       const ny = (B[1] - A[1]) * (Cc[0] - A[0]) - (B[0] - A[0]) * (Cc[1] - A[1]);
-      if (ny >= 0) this.idx.push(base + a, base + b, base + c); else this.idx.push(base + a, base + c, base + b);
+      if ((ny >= 0) !== down) this.idx.push(base + a, base + b, base + c); else this.idx.push(base + a, base + c, base + b);
     }
   }
-  box(cx, y0, cz, w, h, d, Pm, C, rot = 0) { this.prism(move(SHAPES.rect(w, d), cx, cz, rot), y0, y0 + h, Pm, C); }
+  box(cx, y0, cz, w, h, d, Pm, C, rot = 0, o = {}) { this.prism(move(SHAPES.rect(w, d), cx, cz, rot), y0, y0 + h, Pm, C, o); }
   cyl(cx, y0, cz, r, h, Pm, C, seg = 10) { this.prism(move(SHAPES.ellipse(r * 2, r * 2, seg), cx, cz), y0, y0 + h, Pm, C); }
   build(kind) {
     const g = new THREE.BufferGeometry();
@@ -514,7 +519,7 @@ class GB {
   }
 }
 const CH = P * 4;
-const chunks = { building: new Map(), prop: new Map(), glow: new Map() };
+const chunks = { building: new Map(), prop: new Map(), glow: new Map(), glass: new Map() };
 function gb(kind, x, z) {
   const k = `${Math.floor((x + HALF + 400) / CH)},${Math.floor((z + HALF + 400) / CH)}`;
   let b = chunks[kind].get(k); if (!b) { b = new GB(); chunks[kind].set(k, b); }
@@ -581,7 +586,7 @@ function rooftop(poly, y, seed, style) {
   }
 }
 
-function streetFront(b, facing, style, h, downtown) {
+function streetFront(b, facing, style, h, downtown, enterable = false) {
   // shop sign band, awning, blade signs, vending machines on the facade that faces the street
   const [nx, nz] = facing;
   const along = nx !== 0 ? b.d : b.w;
@@ -602,7 +607,7 @@ function streetFront(b, facing, style, h, downtown) {
       signs.push({ x: fx + nx * 1.5 + (nx === 0 ? t : 0), y: R(8, Math.min(20, h - 4)), z: fz + nz * 1.5 + (nz === 0 ? t : 0), rotY: nx !== 0 ? 0 : Math.PI / 2, tex: Math.floor(rand() * signTextures.length) });
     }
   }
-  if ((style === 4 || style === 2) && rand() < 0.3) {
+  if ((style === 4 || style === 2) && !enterable && rand() < 0.3) {
     const n = 1 + Math.floor(rand() * 3), t0 = R(-0.3, 0.2) * along;
     for (let i = 0; i < n; i++) {
       const t = t0 + i * 1.05;
@@ -699,6 +704,94 @@ function tower(cx, cz, lw, ld, H, facing, downtown) {
   if (H > 90) { warnLights.push(new THREE.Vector3(poly[0][0], H + 0.6, poly[0][1])); warnLights.push(new THREE.Vector3(poly[Math.floor(poly.length / 2)][0], H + 0.6, poly[Math.floor(poly.length / 2)][1])); }
 }
 
+// ---- walk-in shops: a real ground-floor room with glazing, a door, fittings and its own light
+const shops = [];
+const SHOP_TYPES = [
+  { key: 'konbini', w: 0.32, names: ['コンビニ ハーバー店', 'コンビニ 湾岸二丁目店', 'コンビニ 汐見通り店'], light: 0xf0f5ff, li: 16, floor: [0.8, 0.81, 0.82], wall: [0.9, 0.9, 0.88] },
+  { key: 'ramen', w: 0.28, names: ['ラーメン 湾岸軒', '中華そば 灯', '麺処 みなと'], light: 0xffc27a, li: 14, floor: [0.2, 0.17, 0.14], wall: [0.5, 0.36, 0.24] },
+  { key: 'cafe', w: 0.25, names: ['喫茶 汐見', 'CAFE HARBOR', '珈琲 あかり'], light: 0xffd6a0, li: 14, floor: [0.38, 0.26, 0.17], wall: [0.8, 0.76, 0.7] },
+  { key: 'zakka', w: 0.15, names: ['雑貨 ミナト', '古道具 ネオン', '文具と雑貨 港'], light: 0xfff0dc, li: 14, floor: [0.55, 0.5, 0.44], wall: [0.86, 0.84, 0.8] },
+];
+function shopInterior(x, z, along, depth, n, extTint, seed) {
+  let r = rand(), type = SHOP_TYPES[0];
+  for (const t of SHOP_TYPES) { if (r < t.w) { type = t; break; } r -= t.w; }
+  const t = [-n[1], n[0]];
+  const A = along / 2, Bd = depth / 2, WT = 0.25;
+  const W = (a, b) => [x + t[0] * a + n[0] * b, z + t[1] * a + n[1] * b];
+  const trimP = [seed, 8, 0, 999];
+  const place = (kind, a, b, y0, sa, h, sb, C, Pm = trimP, collide = false, o = {}) => {
+    const wx = Math.abs(t[0]) * sa + Math.abs(n[0]) * sb, wz = Math.abs(t[1]) * sa + Math.abs(n[1]) * sb;
+    const [cx, cz] = W(a, b);
+    gb(kind, x, z).box(cx, y0, cz, wx, h, wz, kind === 'building' ? Pm : [0, 0, 0, 0], C, 0, o);
+    if (collide) colliders.push({ x0: cx - wx / 2, x1: cx + wx / 2, z0: cz - wz / 2, z1: cz + wz / 2, y0, y1: y0 + h });
+  };
+  const cyl = (a, b, y0, rad, h, C, kind = 'prop') => { const [cx, cz] = W(a, b); gb(kind, x, z).cyl(cx, y0, cz, rad, h, [0, 0, 0, 0], C, 8); };
+  const F0 = 0.29; // finished floor level
+  // shell
+  place('building', 0, -Bd + WT / 2, 0.25, 2 * A, 3.65, WT, type.wall, trimP, true);
+  place('building', -A + WT / 2, 0, 0.25, WT, 3.65, 2 * Bd, type.wall, trimP, true);
+  place('building', A - WT / 2, 0, 0.25, WT, 3.65, 2 * Bd, type.wall, trimP, true);
+  place('building', 0, 0, 3.9, 2 * A, 0.7, 2 * Bd, [0.88, 0.88, 0.86], trimP, false, { bottom: true });
+  place('building', 0, Bd - 0.15, 3.2, 2 * A, 0.7, 0.3, extTint, [seed, 8, 0, 999]);
+  place('prop', 0, 0, 0.25, 2 * A - 2 * WT, 0.04, 2 * Bd - 0.3, type.floor);
+  // shop front: glazing either side of a 1.8 m doorway
+  const doorA = R(-1, 1) * Math.max(0, A - 2.2);
+  const dl = doorA - 0.9, dr = doorA + 0.9;
+  const frame = [0.12, 0.12, 0.13];
+  if (dl - (-A + WT) > 0.1) place('glass', (-A + WT + dl) / 2, Bd - 0.15, 0.25, dl - (-A + WT), 2.95, 0.06, [0.6, 0.68, 0.72], trimP, true);
+  if ((A - WT) - dr > 0.1) place('glass', (dr + A - WT) / 2, Bd - 0.15, 0.25, (A - WT) - dr, 2.95, 0.06, [0.6, 0.68, 0.72], trimP, true);
+  place('glass', doorA, Bd - 0.15, 2.5, 1.8, 0.7, 0.06, [0.6, 0.68, 0.72]);
+  for (const a of [-A + WT + 0.04, dl, dr, A - WT - 0.04]) place('prop', a, Bd - 0.15, 0.25, 0.09, 2.95, 0.12, frame);
+  place('prop', doorA, Bd - 0.15, 2.45, 1.8, 0.07, 0.12, frame);
+  const inA = A - WT - 0.3, backB = -Bd + WT, frontB = Bd - 0.4;
+  const lampRow = (y, col, stepB = 2.2) => { for (let b = backB + 1.2; b < frontB - 0.5; b += stepB) place('glow', 0, b, y, 2 * inA - 0.8, 0.05, 0.3, col); };
+  if (type.key === 'konbini') {
+    lampRow(3.84, [1.8, 1.85, 2.0]);
+    place('building', 0, backB + 0.4, F0, 2 * inA, 2.1, 0.75, [0.85, 0.87, 0.9], [seed, 12, 0, 999], true);
+    const counterA = doorA > 0 ? -A + WT + 1.6 : A - WT - 1.6;
+    place('building', counterA, frontB - 1.6, F0, 2.6, 1.0, 0.7, [0.92, 0.92, 0.9], trimP, true);
+    place('prop', counterA, frontB - 1.75, F0 + 1.0, 0.4, 0.28, 0.35, [0.08, 0.08, 0.1]);
+    place('glow', counterA, frontB - 1.6, 2.7, 2.2, 0.4, 0.05, [0.2, 1.2, 0.5]);
+    for (let b = backB + 2.6, k = 0; b < frontB - 3.0; b += 2.1, k++)
+      place('building', -doorA * 0.15, b, F0, Math.max(1.5, 2 * inA * 0.55), 1.45, 0.9, [0.85, 0.86, 0.88], [seed + k, 11, 0, 999], true);
+    place('building', -counterA * 0.4, frontB - 0.3, F0, Math.min(3, inA), 1.05, 0.4, [0.85, 0.86, 0.88], [seed + 7, 11, 0, 999], true);
+  } else if (type.key === 'ramen') {
+    const b0 = backB + 2.3;
+    place('building', 0, b0, F0, 2 * inA - 0.4, 1.0, 0.55, [0.3, 0.2, 0.12], trimP, true);
+    place('prop', 0, b0 + 0.1, F0 + 1.0, 2 * inA - 0.2, 0.06, 0.8, [0.62, 0.45, 0.28]);
+    place('prop', 0, backB + 0.45, F0, 2 * inA, 0.9, 0.8, [0.72, 0.74, 0.77]);
+    for (let a = -inA + 0.8; a < inA - 0.5; a += 1.3) cyl(a, backB + 0.45, F0 + 0.9, 0.26, 0.38, [0.78, 0.78, 0.8]);
+    place('glow', 0, backB + 0.03, 2.2, 2 * inA - 0.6, 0.75, 0.04, [1.1, 0.9, 0.6]);
+    for (let a = -inA + 0.6; a < inA - 0.3; a += 0.75) { cyl(a, b0 + 0.75, F0, 0.05, 0.62, [0.1, 0.1, 0.1]); cyl(a, b0 + 0.75, F0 + 0.62, 0.2, 0.06, [0.55, 0.08, 0.06]); }
+    for (let a = -inA + 0.8; a < inA - 0.3; a += 1.6) { place('glow', a, b0 + 0.25, 2.75, 0.34, 0.22, 0.34, [1.8, 1.2, 0.6]); place('prop', a, b0 + 0.25, 2.97, 0.02, 0.93, 0.02, [0.05, 0.05, 0.05]); }
+    if (frontB - (b0 + 1.6) > 2.2) for (const a of [-inA * 0.5, inA * 0.5]) place('building', a, frontB - 1.1, F0, 1.2, 0.72, 0.8, [0.45, 0.3, 0.18], trimP, true);
+    const noren = pick([[0.1, 0.13, 0.35], [0.55, 0.08, 0.06], [0.85, 0.82, 0.74]]);
+    for (let k = -1; k <= 1; k++) place('prop', doorA + k * 0.6, Bd + 0.06, 1.75, 0.56, 0.7, 0.03, noren);
+    lampRow(3.84, [1.4, 1.1, 0.7], 3.0);
+  } else if (type.key === 'cafe') {
+    const b0 = backB + 1.6;
+    place('building', 0, b0, F0, 2 * inA - 1.0, 1.0, 0.6, [0.28, 0.2, 0.14], trimP, true);
+    place('glow', inA * 0.4, b0 + 0.05, F0 + 0.55, 1.4, 0.4, 0.5, [1.7, 1.45, 1.1]);
+    place('prop', -inA * 0.4, b0, F0 + 1.0, 0.6, 0.45, 0.45, [0.7, 0.72, 0.75]);
+    place('glow', 0, backB + 0.03, 2.3, 2.6, 0.8, 0.04, [0.3, 0.26, 0.2]);
+    for (let b = b0 + 2.0; b < frontB - 0.6; b += 2.2) for (let a = -inA + 1.0; a < inA - 0.8; a += 2.3) {
+      cyl(a, b, F0, 0.05, 0.43, [0.08, 0.08, 0.08]); cyl(a, b, F0 + 0.43, 0.42, 0.05, [0.55, 0.4, 0.26]);
+      colliders.push({ x0: W(a, b)[0] - 0.4, x1: W(a, b)[0] + 0.4, z0: W(a, b)[1] - 0.4, z1: W(a, b)[1] + 0.4, y0: 0, y1: 0.8 });
+      for (const s of [-1, 1]) { place('prop', a + s * 0.7, b, F0, 0.42, 0.44, 0.42, [0.2, 0.28, 0.24]); place('prop', a + s * 0.9, b, F0 + 0.44, 0.06, 0.45, 0.42, [0.2, 0.28, 0.24]); }
+      place('glow', a, b, 2.6, 0.3, 0.25, 0.3, [1.7, 1.25, 0.7]); place('prop', a, b, 2.85, 0.02, 1.05, 0.02, [0.05, 0.05, 0.05]);
+    }
+    for (const a of [-inA + 0.3, inA - 0.3]) { cyl(a, frontB - 0.4, F0, 0.25, 0.45, [0.5, 0.3, 0.2]); cyl(a, frontB - 0.4, F0 + 0.45, 0.35, 0.9, [0.12, 0.3, 0.12]); }
+    lampRow(3.84, [0.9, 0.75, 0.55], 3.2);
+  } else {
+    for (const s of [-1, 1]) place('building', s * (inA - 0.1), 0, F0, 0.5, 2.2, 2 * Bd - 1.4, [0.8, 0.78, 0.74], [seed + s, 11, 0, 999], true);
+    place('building', 0, backB + 0.3, F0, 2 * inA - 1.2, 2.2, 0.5, [0.8, 0.78, 0.74], [seed + 3, 11, 0, 999], true);
+    for (let b = backB + 2.4; b < frontB - 1.5; b += 2.4) place('building', 0, b, F0, Math.min(2.4, inA), 0.85, 1.1, [0.6, 0.45, 0.3], [seed + b, 11, 0, 999], true);
+    lampRow(3.84, [2.0, 1.85, 1.6], 2.4);
+  }
+  const [cx, cz] = W(0, 0);
+  shops.push({ type, name: pick(type.names), x: cx, z: cz, n, t, A, Bd, door: W(doorA, Bd) });
+}
+
 function lowBuilding(x, z, w, d, facing, hMax) {
   const seed = rand();
   const r = rand();
@@ -707,12 +800,15 @@ function lowBuilding(x, z, w, d, facing, hMax) {
   const h = 4.6 + (floors - 1) * (style === 2 ? 3.0 : 3.3) + R(0.5, 1.5);
   const poly = move(SHAPES.rect(w, d), x, z);
   const tint = TINT[style]();
-  mass(poly, 0, h, style, seed, R(0.3, 0.75), tint);
+  const along = facing[0] !== 0 ? d : w, depth = facing[0] !== 0 ? w : d;
+  const enter = along >= 6.5 && depth >= 8 && shops.length < 110 && rand() < 0.075; // spread thinly and capped to keep phones fast
+  if (enter) { mass(poly, 4.6, h, style, seed, R(0.3, 0.75), tint); shopInterior(x, z, along, depth, facing, tint, seed); }
+  else mass(poly, 0, h, style, seed, R(0.3, 0.75), tint);
   const b = bbox(poly);
   if (style === 3) { ledge(poly, h - 0.9, 0.45, 0.6, seed, TRIM()); ledge(poly, 4.4, 0.15, 0.3, seed, TRIM()); }
   else coping(poly, h, seed);
   if (style === 2) balconies(b, facing, 4.8, h, seed, pick([[0.75, 0.74, 0.7], [0.55, 0.6, 0.64]]));
-  streetFront(b, facing, style, h, false);
+  streetFront(b, facing, style, h, false, enter);
   rooftop(poly, h, seed, style);
 }
 
@@ -873,9 +969,22 @@ const buildingMat = patch(new THREE.MeshStandardMaterial({ color: 0xffffff, roug
       wall = mix(wall, vec3(0.42, 0.44, 0.46) * rib * (0.85 + 0.3 * h21(vec2(shopId, 7.0))), shutter);
       frameMetal = mix(frameMetal, 0.7, shutter); frameRough = mix(frameRough, 0.45, shutter);
     }
+    vec3 bExtra = vec3(0.0);
+    if (style > 10.5) {
+      vec2 gp = style < 11.5 ? vec2(F.x * 5.0, (F.y - 0.29) / 0.42) : vec2(F.x * 9.0, (F.y - 0.29) / 0.5);
+      vec2 gi = floor(gp), gf = fract(gp);
+      float board = step(gf.y, style < 11.5 ? 0.12 : 0.06);
+      vec3 pc = 0.5 + 0.5 * cos(6.2831 * (h21(gi + seed * 9.0) + vec3(0.0, 0.33, 0.67)));
+      float item = step(0.1, gf.x) * step(gf.x, 0.9) * step(gf.y, style < 11.5 ? 0.82 : 0.7) * (1.0 - board);
+      vec3 base = style < 11.5 ? vec3(0.86, 0.87, 0.9) : vec3(0.75, 0.8, 0.85);
+      wall = mix(base, pc * (0.55 + 0.45 * h21(gi + 3.0)), item);
+      if (isRoof > 0.5) { wall = base; item = 0.0; }
+      frameRough = 0.45; frameMetal = 0.0;
+      bExtra = style < 11.5 ? wall * item * 0.12 : mix(vec3(1.3, 1.4, 1.5), pc * 1.6, item) * (1.0 - isRoof) * 0.8;
+    }
     if (isRoof > 0.5 && !trim) { wall = vec3(0.16, 0.16, 0.17) * (0.8 + 0.4 * vnoise(vWP.xz * 0.5)); frameRough = 0.8; frameMetal = 0.0; }
     diffuseColor.rgb = mix(wall, gSpec, g);
-    diffuseColor.rgb *= mix(0.45, 1.0, smoothstep(0.0, 1.2, vWP.y) * 0.5 + 0.5 * smoothstep(0.0, 6.0, vWP.y));
+    if (style < 7.5) diffuseColor.rgb *= mix(0.45, 1.0, smoothstep(0.0, 1.2, vWP.y) * 0.5 + 0.5 * smoothstep(0.0, 6.0, vWP.y));
     float bRough = mix(frameRough * mix(1.0, 0.65, uWet * isSide), 0.05, g);
     float bMetal = mix(frameMetal, 1.0, g);
     // shop interiors: ceiling lights, shelving and goods, per-shop colour
@@ -890,20 +999,23 @@ const buildingMat = patch(new THREE.MeshStandardMaterial({ color: 0xffffff, roug
     vec3 interiorC = mix(vec3(0.22, 0.2, 0.18) + shelfC, vec3(1.3), ceilingL);
     float shopOnF = shopOn;
     vec3 bEmis = wc * wI * lit * win * uWin * 1.2
-      + shopCol * interiorC * shop * shopOnF * uWin * 0.7 * (0.55 + 0.45 * h21(vec2(shopId, 9.0)));
+      + shopCol * interiorC * shop * shopOnF * max(uWin, 0.55) * 0.7 * (0.55 + 0.45 * h21(vec2(shopId, 9.0)))
+      + bExtra;
   `,
   fRough: 'roughnessFactor = bRough;',
   fMetal: 'metalnessFactor = bMetal;',
   fEmis: 'totalEmissiveRadiance += bEmis;',
 });
 const propMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.3 });
+const glassMat = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, opacity: 0.22, roughness: 0.04, metalness: 0.9, depthWrite: false });
 const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true });
 let vertTotal = 0;
 for (const [kind, map] of Object.entries(chunks)) for (const b of map.values()) {
   const geo = b.build(kind === 'building' ? 'building' : 'plain');
   vertTotal += b.vc;
-  const m = new THREE.Mesh(geo, kind === 'building' ? buildingMat : kind === 'prop' ? propMat : glowMat);
-  if (kind !== 'glow') { m.castShadow = true; m.receiveShadow = true; }
+  const m = new THREE.Mesh(geo, { building: buildingMat, prop: propMat, glow: glowMat, glass: glassMat }[kind]);
+  if (kind === 'building' || kind === 'prop') { m.castShadow = true; m.receiveShadow = true; }
+  if (kind === 'glass') m.renderOrder = 2;
   if (kind === 'prop') m.layers.set(DETAIL);
   scene.add(m);
 }
@@ -1258,12 +1370,14 @@ const rainMat = new THREE.ShaderMaterial({
 
 // ================================================================ time-of-day presets
 const PRESETS = {
-  blue: { top: 0x0c1c44, hor: 0x5a70a8, warm: 0xff9360, ground: 0x07090e, sky: 0.9, el: 1.2, az: 196, sunCol: 0xff9a60, sunI: 0.55, glow: 1.3, disk: 0, stars: 0.3, clouds: 0.55, hs: 0x5a76b8, hg: 0x1a1410, hi: 0.4, env: 0.7, win: 1.0, lamps: 1.0, wet: 0.85, exp: 0.9, fog: 0x2a3456, fogD: 0.00105, bloom: 0.6, rain: false },
-  night: { top: 0x02040c, hor: 0x161c38, warm: 0x3a2448, ground: 0x020305, sky: 1.2, el: 38, az: 150, sunCol: 0xa8c0ff, sunI: 0.14, glow: 0.35, disk: 0.08, stars: 1, clouds: 0.3, hs: 0x2a3a66, hg: 0x120c08, hi: 0.12, env: 0.45, win: 1.2, lamps: 1.2, wet: 1.0, exp: 1.1, fog: 0x0f1428, fogD: 0.0012, bloom: 0.6, rain: true },
+  day: { top: 0x3a78d6, hor: 0xc4d8ee, warm: 0xffe6c4, ground: 0x3c4148, sky: 2.0, el: 50, az: 215, sunCol: 0xfff2e0, sunI: 3.4, glow: 0.5, disk: 0.6, stars: 0, clouds: 0.8, hs: 0xc4dcff, hg: 0x6a6050, hi: 1.2, env: 1.0, win: 0.06, lamps: 0.0, wet: 0.12, exp: 0.9, fog: 0xb6c6da, fogD: 0.0008, bloom: 0.2, rain: false },
+  blue: { top: 0x0c1c44, hor: 0x5a70a8, warm: 0xff9360, ground: 0x07090e, sky: 0.9, el: 1.2, az: 196, sunCol: 0xff9a60, sunI: 0.8, glow: 1.3, disk: 0, stars: 0.3, clouds: 0.55, hs: 0x6a86c8, hg: 0x2a2018, hi: 0.8, env: 0.85, win: 1.0, lamps: 1.1, wet: 0.85, exp: 1.2, fog: 0x2a3456, fogD: 0.00105, bloom: 0.6, rain: false },
+  night: { top: 0x02040c, hor: 0x161c38, warm: 0x3a2448, ground: 0x020305, sky: 1.2, el: 38, az: 150, sunCol: 0xa8c0ff, sunI: 0.25, glow: 0.35, disk: 0.08, stars: 1, clouds: 0.3, hs: 0x3a4a78, hg: 0x1a120c, hi: 0.35, env: 0.6, win: 1.2, lamps: 1.4, wet: 1.0, exp: 1.45, fog: 0x0f1428, fogD: 0.0012, bloom: 0.6, rain: true },
   golden: { top: 0x2d5ea8, hor: 0xffc590, warm: 0xff8a3c, ground: 0x241a12, sky: 1.8, el: 6, az: 232, sunCol: 0xffb070, sunI: 4.2, glow: 1.4, disk: 0.25, stars: 0, clouds: 0.7, hs: 0x9ab8ec, hg: 0x3a2a1c, hi: 1.0, env: 1.0, win: 0.22, lamps: 0.0, wet: 0.3, exp: 0.85, fog: 0xc99c7c, fogD: 0.0009, bloom: 0.5, rain: false },
 };
-const presetOrder = ['blue', 'night', 'golden'];
-let presetKey = 'blue';
+const presetOrder = ['day', 'blue', 'night', 'golden'];
+let presetKey = 'day';
+let baseExposure = 1, insideShop = false; // eye adaptation: exposure eases down indoors
 let rainOn = false;
 function applyPreset(key) {
   const p = PRESETS[key]; presetKey = key;
@@ -1277,17 +1391,18 @@ function applyPreset(key) {
   sun.color.set(p.sunCol); sun.intensity = p.sunI;
   hemi.color.set(p.hs); hemi.groundColor.set(p.hg); hemi.intensity = p.hi;
   scene.fog.color.set(p.fog); scene.fog.density = p.fogD; U.fogD.value = p.fogD;
-  renderer.toneMappingExposure = p.exp;
+  baseExposure = p.exp;
   bloom.strength = p.bloom;
   U.win.value = p.win; U.wet.value = p.wet; U.lamps.value = p.lamps;
   lampHeadMat.color.setRGB(6, 5.2, 4.2).multiplyScalar(Math.max(p.lamps, 0.15));
   poolMat.color.setRGB(0.3, 0.23, 0.16).multiplyScalar(p.lamps);
   beamMat.color.setRGB(0.35, 0.33, 0.3).multiplyScalar(Math.max(p.lamps, 0.25));
-  glowMat.color.setScalar(key === 'golden' ? 0.5 : 1);
-  vendMats[1].color.setScalar(key === 'golden' ? 1.0 : 1.6);
-  screenMats.forEach((m) => { m.uniforms.uGain.value = key === 'golden' ? 0.9 : 1.6; });
-  farShoreMat.color.setScalar(key === 'golden' ? 0.15 : 1);
-  farLandMat.color.set(p.fog).multiplyScalar(key === 'golden' ? 0.55 : 0.35);
+  const lit = key === 'golden' || key === 'day';
+  glowMat.color.setScalar(lit ? 0.6 : 1);
+  vendMats[1].color.setScalar(lit ? 1.0 : 1.6);
+  screenMats.forEach((m) => { m.uniforms.uGain.value = lit ? 1.0 : 1.6; });
+  farShoreMat.color.setScalar(lit ? 0.12 : 1);
+  farLandMat.color.set(p.fog).multiplyScalar(lit ? 0.6 : 0.35);
   envLightMat.color.setScalar(Math.min(p.win, 1.2) * 0.35);
   if (envRT) envRT.dispose();
   envRT = pmrem.fromScene(envScene, 0.02, 0.1, 200);
@@ -1352,12 +1467,12 @@ function setMode(m) {
   document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   camera.near = m === 'walk' ? 0.15 : 0.5; camera.updateProjectionMatrix();
   player.vel.set(0, 0, 0);
-  if (m === 'walk' && player.pos.z > Z_WATER - 0.5) player.pos.set(DOWNTOWN.x - 27, player.pos.y, Z_WATER - 3.2);
+  if (m === 'walk' && player.pos.z > Z_WATER - 0.5) player.pos.set(DOWNTOWN.x, player.pos.y, Z_WATER - 3.2);
 }
 addEventListener('keydown', (e) => {
   if (!started) return;
   keys.add(e.code);
-  if (e.code === 'KeyT') applyPreset(presetOrder[(presetOrder.indexOf(presetKey) + 1) % 3]);
+  if (e.code === 'KeyT') applyPreset(presetOrder[(presetOrder.indexOf(presetKey) + 1) % presetOrder.length]);
   if (e.code === 'KeyR') setRain(!rainOn);
   if (e.code === 'KeyH') document.body.classList.toggle('hud-off');
   if (e.code === 'KeyF') setMode(mode === 'walk' ? 'fly' : 'walk');
@@ -1454,8 +1569,8 @@ function start(m) {
   document.getElementById('intro').hidden = true;
   document.getElementById('hud').hidden = false;
   if (m === 'walk') {
-    player.pos.set(DOWNTOWN.x - 27, 0.25 + EYE, Z_WATER - 3.2);
-    player.yaw = 0.25; player.pitch = 0.12;
+    player.pos.set(spawn.x, 0.25 + EYE, spawn.z);
+    player.yaw = spawn.yaw; player.pitch = 0.02;
   } else {
     const e = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
     player.pos.copy(camera.position); player.yaw = e.y; player.pitch = e.x;
@@ -1466,6 +1581,14 @@ function start(m) {
   }
   canvas.focus();
 }
+// start on the pavement facing the walk-in shop closest to the waterfront downtown
+const spawn = (() => {
+  let s = shops[0], bdist = Infinity;
+  for (const c of shops) { const d = Math.hypot(c.x - DOWNTOWN.x, c.z - RZW) + (c.type.key === 'konbini' || c.type.key === 'ramen' ? 0 : 60); if (d < bdist) { bdist = d; s = c; } }
+  if (!s) return { x: DOWNTOWN.x - 27, z: Z_WATER - 3.2, yaw: 0.25 };
+  const x = s.door[0] + s.n[0] * 6 + s.t[0] * 2.5, z = s.door[1] + s.n[1] * 6 + s.t[1] * 2.5;
+  return { x, z, yaw: Math.atan2(s.door[0] - x, s.door[1] - z) + Math.PI };
+})();
 const startWalk = document.getElementById('startWalk'), startFly = document.getElementById('startFly');
 startWalk.addEventListener('click', () => start('walk'));
 startFly.addEventListener('click', () => start('fly'));
@@ -1544,6 +1667,35 @@ function updateTraffic(dt, t) {
   }
 }
 
+const shopLights = [0, 1].map(() => { const l = new THREE.PointLight(0xffffff, 0, 14, 1.6); scene.add(l); return l; });
+const toastEl = document.getElementById('toast');
+let toastText = '';
+function updateShops(p) {
+  let best = [null, null], bd = [Infinity, Infinity];
+  for (const s of shops) {
+    const d = (s.x - p.x) ** 2 + (s.z - p.z) ** 2;
+    if (d < bd[0]) { bd[1] = bd[0]; best[1] = best[0]; bd[0] = d; best[0] = s; } else if (d < bd[1]) { bd[1] = d; best[1] = s; }
+  }
+  best.forEach((s, i) => {
+    const l = shopLights[i];
+    if (!s || bd[i] > 45 * 45) { l.intensity = 0; return; }
+    l.position.set(s.x, 3.5, s.z); l.color.set(s.type.light);
+    l.intensity = s.type.li * (0.6 + 0.4 * Math.min(1, U.lamps.value + 0.3));
+    l.distance = Math.max(s.A, s.Bd) * 2 + 4;
+  });
+  let msg = '';
+  insideShop = false;
+  const s = best[0];
+  if (s && mode === 'walk') {
+    const dx = p.x - s.x, dz = p.z - s.z;
+    const a = dx * s.t[0] + dz * s.t[1], b = dx * s.n[0] + dz * s.n[1];
+    insideShop = Math.abs(a) < s.A + 0.3 && Math.abs(b) < s.Bd + 0.3;
+    if (insideShop) msg = `店内：<b>${s.name}</b>`;
+    else if (Math.hypot(p.x - s.door[0], p.z - s.door[1]) < 10) msg = `入れる店：<b>${s.name}</b>　入口へ進むと入店`;
+  }
+  if (msg !== toastText) { toastText = msg; toastEl.innerHTML = msg; toastEl.hidden = !msg; }
+}
+
 function updateDynLights(p) {
   for (const n of nearest) { n.d = Infinity; n.i = -1; }
   for (let i = 0; i < lampHeads.length; i++) {
@@ -1558,7 +1710,7 @@ function updateDynLights(p) {
     const l = dynLights[k];
     if (n.i < 0) { l.intensity = 0; return; }
     l.position.copy(lampHeads[n.i]); l.position.y = 7.6;
-    l.intensity = 110 * U.lamps.value;
+    l.intensity = 170 * U.lamps.value;
   });
 }
 
@@ -1629,10 +1781,13 @@ function frame() {
   sun.target.updateMatrixWorld();
   updateTraffic(dt, t);
   updateDynLights(focus);
+  updateShops(focus);
   warnMat.color.setRGB(1, 0.08, 0.05).multiplyScalar(Math.sin(t * 2.6) > 0.55 ? 7 : 0.25);
   rainMat.uniforms.uCam.value.copy(camera.position);
   rainMat.uniforms.uAmt.value += ((rainOn ? 1 : 0) - rainMat.uniforms.uAmt.value) * Math.min(1, dt * 2);
   U.rain.value = rainMat.uniforms.uAmt.value;
+  const expT = insideShop ? Math.min(baseExposure, 0.85) : baseExposure;
+  renderer.toneMappingExposure += (expT - renderer.toneMappingExposure) * Math.min(1, dt * 2.5);
   renderer.shadowMap.needsUpdate = true;
   composer.render(dt);
   fpsFrames++; fpsTime += dt;
@@ -1645,10 +1800,10 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
-applyPreset('blue');
+applyPreset('day');
 setMode('walk');
 startWalk.disabled = startFly.disabled = false;
 startWalk.textContent = '歩いて探索';
 requestAnimationFrame(frame);
-window.__city = { verts: vertTotal, colliders: colliders.length, cars: cars.length, signs: signs.length, vendors: vendors.length, poles: utilPoles.length };
+window.__city = { shops: shops.length, verts: vertTotal, colliders: colliders.length, cars: cars.length, signs: signs.length, vendors: vendors.length, poles: utilPoles.length };
 </script>
