@@ -1955,7 +1955,7 @@ function updateShops(p) {
   best.forEach((s, i) => {
     const l = shopLights[i];
     if (!s || bd[i] > 45 * 45) { l.intensity = 0; return; }
-    l.position.set(s.x, 3.5, s.z); l.color.set(s.type.light);
+    l.position.set(s.x, 2.6, s.z); l.color.set(s.type.light);
     l.intensity = s.type.li * (0.6 + 0.4 * Math.min(1, U.lamps.value + 0.3));
     l.distance = Math.max(s.A, s.Bd) * 2 + 4;
   });
